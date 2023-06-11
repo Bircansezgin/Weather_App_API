@@ -1,30 +1,35 @@
-//
-//  ViewController.swift
-//  WeatherAPP
-//
-//  Created by Bircan Sezgin on 10.06.2023.
-//
-
 import UIKit
+import MapKit
 
 class ViewController: UIViewController {
     
+    
+    @IBOutlet weak var uiViewMaps: UIView!
+    @IBOutlet weak var mapView: MKMapView!
     @IBOutlet weak var counteryLabel: UILabel!
     @IBOutlet weak var tempLabel: UILabel!
     @IBOutlet weak var conditionLabel: UILabel!
     @IBOutlet weak var imageView: UIImageView!
+    @IBOutlet weak var dataLabel: UILabel!
     
     @IBOutlet weak var textField: UITextField!
 
+    private let locationManager = CLLocationManager()
     
+    var cityName = String()
+    var cityTemp = String()
     
     override func viewDidLoad() {
         super.viewDidLoad()
+
         
         textField.addTarget(self, action: #selector(textFieldDidChange(_:)), for: .editingChanged)
         
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
         view.addGestureRecognizer(tapGesture)
+        
+        uiViewMaps.layer.cornerRadius = 50
+        uiViewMaps.clipsToBounds = true
 
     }
         
@@ -35,12 +40,14 @@ class ViewController: UIViewController {
     @IBAction func button(_ sender: Any) {
         
     }
-    
+
     // Textfield'a Her bir kelime girilince Run!!!!
     @objc func textFieldDidChange(_ textField: UITextField) {
         guard let cityName = textField.text else {
             return
         }
+        
+        //Bu satırda, cityName değişkenindeki boşlukları artı işaretleriyle değiştirerek yeni bir formattedCityName değişkeni oluşturulur. Bu adım genellikle, metin tabanlı API isteklerinde boşluk yerine artı işaretiyle ifade edilen URL formatına uygun hale getirmek için yapılır.
         
         let formattedCityName = cityName.replacingOccurrences(of: " ", with: "+")
         let apiKey = "29bb63f6bc754f07a5c203210231006"
@@ -62,38 +69,53 @@ class ViewController: UIViewController {
                         let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
                         
                         DispatchQueue.main.async {
+                            // City Name!
                             if let location = jsonResponse["location"] as? [String: Any],
                                let cityName = location["name"] as? String {
                                 self.counteryLabel.text = cityName
+                                self.cityName = cityName
                             }
-                            
+                            // Temp!
                             if let current = jsonResponse["current"] as? [String: Any],
                                let temp = current["temp_c"] as? Double {
                                 self.tempLabel.text = "\(temp) °C"
+                                self.cityTemp = String(temp)
                             }
-                            
+                            // Date!
+                            if let last_Uptadate = jsonResponse["location"] as? [String : Any],
+                               let update = last_Uptadate["localtime"] as? String{
+                                self.dataLabel.text = "Update Date : \(update)"
+                            }
+                            // Weather Current!
                             if let current = jsonResponse["current"] as? [String: Any],
                                let condition = current["condition"] as? [String: Any],
-                               let conditionText = condition["text"] as? String {
-                                self.conditionLabel.text = conditionText
+                               let text = condition["text"] as? String {
+                                self.conditionLabel.text = text
                             }
-                            
+                            // Image!
                             if let current = jsonResponse["current"] as? [String: Any],
-                               let condition = current["condition"] as? [String: Any],
-                               let iconURLString = condition["icon"] as? String,
-                               let iconURL = URL(string: "https:\(iconURLString)") {
-                                URLSession.shared.dataTask(with: iconURL) { (data, response, error) in
-                                    if let error = error {
-                                        print("Hata: \(error.localizedDescription)")
-                                        return
-                                    }
-                                    
-                                    if let data = data, let image = UIImage(data: data) {
-                                        DispatchQueue.main.async {
-                                            self.imageView.image = image
+                               let icon = current["condition"] as? [String: Any],
+                               let iconURL = icon["icon"] as? String {
+                                if let url = URL(string: "http:\(iconURL)") {
+                                    DispatchQueue.global().async {
+                                        if let data = try? Data(contentsOf: url) {
+                                            DispatchQueue.main.async {
+                                                self.imageView.image = UIImage(data: data)
+                                            }
                                         }
                                     }
-                                }.resume()
+                                }
+                            }
+                            
+                            if let location = jsonResponse["location"] as? [String: Any],
+                               let latitude = location["lat"] as? Double,
+                               let longitude = location["lon"] as? Double {
+                                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                                let annotation = MKPointAnnotation()
+                                annotation.coordinate = coordinate
+                                annotation.title = "\(self.cityName), \(self.cityTemp) °C"
+                                self.mapView.addAnnotation(annotation)
+                                self.mapView.setCenter(coordinate, animated: true)
                             }
                         }
                     } catch {
@@ -105,81 +127,36 @@ class ViewController: UIViewController {
             task.resume()
         }
     }
-
-    
-    
-    
-    func otoRequestWeatherApp(){
-        
-        
-        //   // 1) Request & Session (Istek Yollamak)
-        let url = URL(string: "http://api.weatherapi.com/v1/current.json?key=5bce4c0d61314f2d9da103621231006&q=Istanbul&aqi=no")
-        
-        // Session
-        let session = URLSession.shared
-        
-        let task = session.dataTask(with: url!){ data, response, error in
-            if error != nil{
-                let alert = UIAlertController(title: "Hata", message: error?.localizedDescription, preferredStyle: UIAlertController.Style.alert)
-                let ok = UIAlertAction(title: "OK", style: .default)
-                alert.addAction(ok)
-                self.present(alert, animated: true)
-            }
-            else{
-                if data != nil{
-                    do {
-                        let jsonResponse = try JSONSerialization.jsonObject(with: data!, options: JSONSerialization.ReadingOptions.mutableContainers) as! Dictionary<String, Any>
-                        
-                        DispatchQueue.main.async {
-                            if let rates = jsonResponse["location"] as? [String : Any]{
-                                if let name = rates["name"] as? String{
-                                    self.counteryLabel.text = name
-                                }
-                            }
-                            
-                            if let tempRate = jsonResponse["current"] as? [String : Any] {
-                                if let temp = tempRate["temp_c"] as? Double {
-                                    if temp >= 18 && temp <= 30{
-            
-                                    }else{
-                                        self.imageView.image = UIImage(systemName: "cloud.rain.fill")
-                                    }
-                                    self.tempLabel.text = "Temp : \(temp)"
-                                }
-                                
-                                if let condition = tempRate["condition"] as? [String : Any]{
-                                    if let texts = condition["text"] as? String {
-                                        self.conditionLabel.text = texts
-                                    }
-                    
-                                    if let iconURLString = condition["icon"] as? String,
-                                       let iconURL = URL(string: "https:\(iconURLString)") {
-                                        // Resmi indir
-                                        URLSession.shared.dataTask(with: iconURL) { (data, response, error) in
-                                            if let error = error {
-                                                print("Hata: \(error.localizedDescription)")
-                                                return
-                                            }
-                                            
-                                            if let data = data, let image = UIImage(data: data) {
-                                                DispatchQueue.main.async {
-                                                    self.imageView.image = image
-                                                }
-                                            }
-                                        }.resume()
-                                    }
-                                    
-                                }
-                                
-                            }
-                        }
-                    }catch{
-                        
-                    }
-                }
-            }
-        }
-        task.resume()
-    }
 }
 
+extension ViewController: CLLocationManagerDelegate {
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedAlways || status == .authorizedWhenInUse {
+            // Konum izni verildi, işlemleri devam ettir.
+            locationManager.startUpdatingLocation()
+        } else if status == .denied {
+            // Konum izni reddedildi, kullanıcıyı bilgilendir.
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let location = locations.last {
+            let latitude = location.coordinate.latitude
+            let longitude = location.coordinate.longitude
+            
+            // Burada coordinate nesnesini kullanarak haritada bir işaretçi yerleştirebilirsiniz.
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = coordinate
+            annotation.title = "Your Location"
+            mapView.addAnnotation(annotation)
+            mapView.setCenter(coordinate, animated: true)
+            
+            locationManager.stopUpdatingLocation()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Konum alınamadı: \(error.localizedDescription)")
+    }
+}
